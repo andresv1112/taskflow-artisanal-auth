@@ -1,14 +1,24 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+// Capa de Presentación - Página principal que maneja la navegación según el estado de autenticación
+import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import AuthPage from './AuthPage';
+import DashboardPage from './DashboardPage';
 
 const Index = () => {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Cargando...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return user ? <DashboardPage /> : <AuthPage />;
 };
 
 export default Index;
