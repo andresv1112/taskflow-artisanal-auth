@@ -1,17 +1,26 @@
 // Capa de Lógica - Servicio de Tareas
-import { TaskRepository } from "@/data/repositories/taskRepository";
+import { supabase } from "@/integrations/supabase/client";
 import { Task, CreateTaskData, UpdateTaskData } from "@/types/task";
 
 export class TaskService {
-  private taskRepository: TaskRepository;
-
   constructor() {
-    this.taskRepository = new TaskRepository();
+    // No dependencies needed, direct access to data layer
   }
 
   async getUserTasks(userId: string): Promise<Task[]> {
     try {
-      return await this.taskRepository.findByUserId(userId);
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error finding tasks:', error);
+        return [];
+      }
+
+      return data || [];
     } catch (error) {
       console.error('Error in getUserTasks:', error);
       return [];
@@ -35,12 +44,17 @@ export class TaskService {
         };
       }
 
-      const task = await this.taskRepository.create(userId, {
-        title: taskData.title.trim(),
-        description: taskData.description?.trim()
-      });
+      const { data: task, error } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: userId,
+          title: taskData.title.trim(),
+          description: taskData.description?.trim()
+        })
+        .select()
+        .single();
 
-      if (!task) {
+      if (error || !task) {
         return {
           success: false,
           error: "Error al crear la tarea"
@@ -88,9 +102,15 @@ export class TaskService {
         cleanUpdateData.completed = updateData.completed;
       }
 
-      const task = await this.taskRepository.update(taskId, userId, cleanUpdateData);
+      const { data: task, error } = await supabase
+        .from('tasks')
+        .update(cleanUpdateData)
+        .eq('id', taskId)
+        .eq('user_id', userId)
+        .select()
+        .single();
 
-      if (!task) {
+      if (error || !task) {
         return {
           success: false,
           error: "Error al actualizar la tarea"
@@ -112,9 +132,13 @@ export class TaskService {
 
   async deleteTask(taskId: string, userId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const success = await this.taskRepository.delete(taskId, userId);
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId)
+        .eq('user_id', userId);
 
-      if (!success) {
+      if (error) {
         return {
           success: false,
           error: "Error al eliminar la tarea"
@@ -135,11 +159,15 @@ export class TaskService {
 
   async toggleTaskCompletion(taskId: string, userId: string): Promise<{ success: boolean; task?: Task; error?: string }> {
     try {
-      // Primero obtenemos las tareas del usuario para encontrar la tarea específica
-      const tasks = await this.taskRepository.findByUserId(userId);
-      const currentTask = tasks.find(task => task.id === taskId);
+      // Primero obtenemos la tarea específica
+      const { data: currentTask, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .eq('user_id', userId)
+        .single();
 
-      if (!currentTask) {
+      if (error || !currentTask) {
         return {
           success: false,
           error: "Tarea no encontrada"

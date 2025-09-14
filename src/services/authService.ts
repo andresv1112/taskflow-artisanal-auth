@@ -1,12 +1,11 @@
 // Capa de Lógica - Servicio de Autenticación
-import { UserRepository } from "@/data/repositories/userRepository";
+import { supabase } from "@/integrations/supabase/client";
 import { LoginCredentials, RegisterCredentials, AuthResponse, User } from "@/types/auth";
+import bcrypt from "bcryptjs";
 
 export class AuthService {
-  private userRepository: UserRepository;
-
   constructor() {
-    this.userRepository = new UserRepository();
+    // No dependencies needed, direct access to data layer
   }
 
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
@@ -20,9 +19,13 @@ export class AuthService {
       }
 
       // Buscar usuario con password
-      const userWithPassword = await this.userRepository.findByUsernameWithPassword(credentials.username);
-      
-      if (!userWithPassword) {
+      const { data: userWithPassword, error } = await supabase
+        .from('users')
+        .select('id, username, password_hash, created_at, updated_at')
+        .eq('username', credentials.username)
+        .maybeSingle();
+
+      if (error || !userWithPassword) {
         return {
           success: false,
           error: "Credenciales inválidas"
@@ -30,7 +33,7 @@ export class AuthService {
       }
 
       // Verificar password
-      const isPasswordValid = await this.userRepository.verifyPassword(
+      const isPasswordValid = await bcrypt.compare(
         credentials.password,
         userWithPassword.password_hash
       );
@@ -88,7 +91,12 @@ export class AuthService {
       }
 
       // Verificar si el usuario ya existe
-      const existingUser = await this.userRepository.findByUsername(credentials.username);
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', credentials.username)
+        .maybeSingle();
+
       if (existingUser) {
         return {
           success: false,
@@ -97,8 +105,19 @@ export class AuthService {
       }
 
       // Crear nuevo usuario
-      const newUser = await this.userRepository.create(credentials);
-      if (!newUser) {
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(credentials.password, saltRounds);
+
+      const { data: newUser, error } = await supabase
+        .from('users')
+        .insert({
+          username: credentials.username,
+          password_hash: hashedPassword
+        })
+        .select('id, username, created_at, updated_at')
+        .single();
+
+      if (error || !newUser) {
         return {
           success: false,
           error: "Error al crear el usuario"
